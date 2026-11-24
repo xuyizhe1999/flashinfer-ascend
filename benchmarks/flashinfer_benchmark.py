@@ -9,6 +9,98 @@ from routines.flashinfer_benchmark_utils import (
     full_output_columns,
 )
 
+
+def run_test(args):
+    """
+    Route & run a single FlashInfer test case with test routine.
+
+    Args:
+        args: Parsed command line arguments containing test configuration
+    """
+
+    ## Depending on routine type, route to corresponding test routine
+    ## Imports are done lazily to avoid loading unnecessary dependencies
+    if args.routine in benchmark_apis["gemm"]:
+        from routines.gemm import run_gemm_test
+
+        res = run_gemm_test(args)
+    # elif args.routine in benchmark_apis["attention"]:
+    #     from routines.attention import run_attention_test
+
+    #     res = run_attention_test(args)
+    # elif args.routine in benchmark_apis["moe"]:
+    #     from routines.moe import run_moe_test
+
+    #     res = run_moe_test(args)
+    # elif args.routine in benchmark_apis["unified_moe"]:
+    #     from routines.unified_moe import run_unified_moe_test
+
+    #     res = run_unified_moe_test(args)
+    # elif args.routine in benchmark_apis["allreduce_comm"]:
+    #     from routines.allreduce_comm import run_allreduce_comm_test
+
+    #     res = run_allreduce_comm_test(args)
+    # elif args.routine in benchmark_apis["mixed_comm"]:
+    #     from routines.mixed_comm import run_mixed_comm_test
+
+    #     res = run_mixed_comm_test(args)
+    # elif args.routine in benchmark_apis["norm"]:
+    #     from routines.norm import run_norm_test
+
+    #     res = run_norm_test(args)
+    # elif args.routine in benchmark_apis["quantization"]:
+    #     from routines.quantization import run_quantization_test
+
+    #     res = run_quantization_test(args)
+    # elif args.routine in benchmark_apis["sampling"]:
+    #     from routines.sampling import run_sampling_test
+
+    #     res = run_sampling_test(args)
+    # elif args.routine in benchmark_apis["topk_varlen"]:
+    #     from routines.topk_varlen import run_topk_varlen_test
+
+    #     res = run_topk_varlen_test(args)
+    # elif args.routine in benchmark_apis["rope"]:
+    #     from routines.rope import run_rope_test
+
+    #     res = run_rope_test(args)
+    # elif args.routine in benchmark_apis["mamba"]:
+    #     from routines.mamba import run_mamba_test
+
+    #     res = run_mamba_test(args)
+    # elif args.routine in benchmark_apis["gdn"]:
+    #     from routines.gdn import run_gdn_test
+
+    #     res = run_gdn_test(args)
+
+    # elif args.routine in benchmark_apis["kda"]:
+    #     from routines.kda import run_kda_test
+
+    #     res = run_kda_test(args)
+    # elif args.routine in benchmark_apis["sparse_attention"]:
+    #     from routines.sparse_attention import run_sparse_attention_test
+
+    #     res = run_sparse_attention_test(args)
+    # else:
+    #     raise ValueError(f"Unsupported routine: {args.routine}")
+
+    # Write results to output file if specified
+    if args.output_path is not None:
+        with open(args.output_path, "a", newline="") as fout:
+            writer = csv.writer(fout)
+            for cur_res in res:
+                for key in full_output_columns:
+                    # Backfill every output column the routine didn't set: from
+                    # args when available, else "".  Covers columns belonging to
+                    # other routines (e.g. attention's s_qo) that would otherwise
+                    # KeyError below.  Routine-set values are preserved.
+                    if key not in cur_res or cur_res[key] == "":
+                        cur_res[key] = getattr(args, key, "")
+
+                writer.writerow([str(cur_res[col]) for col in full_output_columns])
+            fout.flush()
+    return
+
 def parse_args(line=sys.argv[1:]):
     """
     Parse command line arguments for test configuration.
@@ -216,7 +308,7 @@ if __name__ == "__main__":
 
                     # Debug
                     print(line_args)
-                    # run_test(line_args)
+                    run_test(line_args)
                 except Exception as e:
                     print(f"[ERROR] Error running test: {line}")
                     print(f"[ERROR] Error: {e}")
@@ -227,4 +319,4 @@ if __name__ == "__main__":
 
         # Debug
         print(args)
-        # run_test(args)
+        run_test(args)
