@@ -1,0 +1,230 @@
+import argparse
+import csv
+import sys
+
+# Only import utilities at module level - routine modules are imported lazily
+# to avoid loading unnecessary dependencies (e.g., mpi4py for non-MPI benchmarks)
+from routines.flashinfer_benchmark_utils import (
+    benchmark_apis,
+    full_output_columns,
+)
+
+def parse_args(line=sys.argv[1:]):
+    """
+    Parse command line arguments for test configuration.
+    First parse shared arguments, then parse routine-specific arguments.
+
+    Args:
+        line: Command line arguments (default: sys.argv[1:])
+
+    Returns:
+        Parsed argument namespace
+    """
+
+    ## Shared arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--routine",
+        "-R",
+        type=str,
+        required=True,
+        choices=list(benchmark_apis["attention"])
+        + list(benchmark_apis["gemm"])
+        + list(benchmark_apis["moe"])
+        + list(benchmark_apis["unified_moe"])
+        + list(benchmark_apis["allreduce_comm"])
+        + list(benchmark_apis["mixed_comm"])
+        + list(benchmark_apis["norm"])
+        + list(benchmark_apis["quantization"])
+        + list(benchmark_apis["sampling"])
+        + list(benchmark_apis["rope"])
+        + list(benchmark_apis["mamba"])
+        + list(benchmark_apis["gdn"])
+        + list(benchmark_apis["kda"])
+        + list(benchmark_apis["sparse_attention"])
+        + list(benchmark_apis["topk_varlen"]),
+    )
+    args, _ = parser.parse_known_args(line[:])
+
+    parser.add_argument(
+        "--no_cuda_graph",
+        action="store_true",
+        default=False,
+        help="Disable CUDA graph to execute kernels outside of the graph.",
+    )
+    parser.add_argument(
+        "--use_cupti",
+        action="store_true",
+        default=False,
+        help="[DEPRECATED] Use CUPTI for timing GPU kernels. This is now the default behavior.",
+    )
+    parser.add_argument(
+        "--use_cuda_events",
+        action="store_true",
+        default=False,
+        help="Use CUDA events for timing GPU kernels instead of CUPTI.",
+    )
+    parser.add_argument(
+        "--refcheck",
+        action="store_true",
+        default=False,
+        help="Run reference check that ensures outputs correct.",
+    )
+    parser.add_argument(
+        "--allow_output_mismatch",
+        action="store_true",
+        default=False,
+        help="Allow output mismatch between backends during reference checks. Error message will be printed but test will continue.",
+    )
+    parser.add_argument(
+        "--random_seed", type=int, default=42, help="Random seed for reproducibility."
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="count", help="Set verbosity level.", default=0
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        required=False,
+        default=None,
+        help="Output path for results. If not specified, results will not be written to a file.",
+    )
+    parser.add_argument(
+        "--num_iters",
+        "-n",
+        type=int,
+        required=False,
+        default=30,
+        help="Number of iterations to run for measurement.",
+    )
+    parser.add_argument(
+        "--dry_run_iters",
+        "-d",
+        type=int,
+        required=False,
+        default=5,
+        help="Number of dry runs.",
+    )
+    parser.add_argument(
+        "--autotune_cache",
+        type=str,
+        required=False,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a JSON file for autotuner config caching. "
+            "When used with --autotune, loads cached configs on entry and "
+            "saves newly tuned configs on exit. Without --autotune, loads "
+            "cached configs for inference without profiling."
+        ),
+    )
+    parser.add_argument(
+        "--case_tag",
+        type=str,
+        required=False,
+        default=None,
+        help="Optional tag for the test case for annotating output.",
+    )
+    parser.add_argument(
+        "--generate_repro_command",
+        action="store_true",
+        default=False,
+        help="If set, will print reproducer command and store it to output csv.",
+    )
+    parser.add_argument(
+        "--repro_command",
+        type=str,
+        required=False,
+        default="",
+        help="Placeholder for generated reproducer command for the test case. Not to be used directly.",
+    )
+    parser.add_argument(
+        "--enable_pdl",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable Programmatic Dependent Launch (PDL) for routines whose backing "
+            "API accepts it. When omitted, PDL is forced off for every routine. "
+            "Routines whose API does not accept PDL emit a warning and ignore the flag."
+        ),
+    )
+
+    ## Check routine and pass on to routine-specific argument parser
+    ## Imports are done lazily to avoid loading unnecessary dependencies
+    if args.routine in benchmark_apis["attention"]:
+        from routines.attention import parse_attention_args
+
+        args = parse_attention_args(line, parser)
+    elif args.routine in benchmark_apis["gemm"]:
+        from routines.gemm import parse_gemm_args
+
+        args = parse_gemm_args(line, parser)
+    else:
+        raise ValueError(f"Unsupported routine: {args.routine}")
+
+    if args.generate_repro_command:
+        args.repro_command = "python3 flashinfer_benchmark.py " + " ".join(line)
+
+    # Deprecation warning for use_cupti
+    if args.use_cupti:
+        print(
+            "[WARNING] --use_cupti is deprecated and will be removed in a future release. CUPTI is now enabled by default."
+        )
+    # use_cupti is deprecated and will be removed in a future release. CUPTI is now enabled by default.
+    # If --use_cuda_events is passed, disable use_cupti
+    args.use_cupti = not args.use_cuda_events
+
+    return args
+
+
+if __name__ == "__main__":
+    # Parse testlist argument first
+    testlist_parser = argparse.ArgumentParser(add_help=False)
+    testlist_parser.add_argument(
+        "--testlist",
+        type=str,
+        required=False,
+        default=None,
+        help="Optional testlist file to run multiple cases.",
+    )
+    testlist_parser.add_argument(
+        "--output_path",
+        type=str,
+        required=False,
+        default=None,
+        help="Output path for results csv.",
+    )
+    testlist_args, _ = testlist_parser.parse_known_args()
+
+    # Setup output file if specified
+    if testlist_args.output_path is not None:
+        with open(testlist_args.output_path, "w", newline="") as fout:
+            csv.writer(fout).writerow(full_output_columns)
+
+    if testlist_args.testlist is not None:
+        # If testlist, run each test in the testlist
+        with open(testlist_args.testlist, "r") as f:
+            import shlex
+
+            for line in f.readlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    line_args = parse_args(shlex.split(line))
+                    line_args.output_path = testlist_args.output_path
+
+                    # Debug
+                    print(line_args)
+                    # run_test(line_args)
+                except Exception as e:
+                    print(f"[ERROR] Error running test: {line}")
+                    print(f"[ERROR] Error: {e}")
+                    continue
+    else:
+        args = parse_args()
+        args.output_path = testlist_args.output_path
+
+        # Debug
+        print(args)
+        # run_test(args)
