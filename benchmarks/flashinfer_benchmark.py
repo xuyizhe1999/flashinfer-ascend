@@ -306,8 +306,6 @@ if __name__ == "__main__":
                     line_args = parse_args(shlex.split(line))
                     line_args.output_path = testlist_args.output_path
 
-                    # Debug
-                    print(line_args)
                     run_test(line_args)
                 except Exception as e:
                     print(f"[ERROR] Error running test: {line}")
@@ -317,6 +315,4 @@ if __name__ == "__main__":
         args = parse_args()
         args.output_path = testlist_args.output_path
 
-        # Debug
-        print(args)
         run_test(args)
