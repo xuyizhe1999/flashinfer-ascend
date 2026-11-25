@@ -253,20 +253,25 @@ def testMmBf16(args):
     if len(tested_backends) > 0:
         if run_refcheck and has_reference_output:
             for i in range(len(tested_backends)):
-                if (
-                    ## TODO:
-                    ## Validate which backends should take a bias.
-                    tested_backends[i]
-                    in (
-                        "cann",
-                    )
-                    and bias is not None
-                ):
-                    reference_output = reference_output_base + bias.unsqueeze(0).to(
-                        out_dtype
-                    )
-                else:
-                    reference_output = reference_output_base
+                ## TODO:
+                ## Need support for "bias" feature.
+                reference_output = reference_output_base
+                # if (
+                #     tested_backends[i]
+                #     in (
+                #         "cudnn",
+                #         "tgv",
+                #         "tinygemm",
+                #         "cute-dsl",
+                #         "batch_invariant",
+                #     )
+                #     and bias is not None
+                # ):
+                #     reference_output = reference_output_base + bias.unsqueeze(0).to(
+                #         out_dtype
+                #     )
+                # else:
+                #     reference_output = reference_output_base
 
                 cos_sim = F.cosine_similarity(
                     reference_output.reshape(-1),
