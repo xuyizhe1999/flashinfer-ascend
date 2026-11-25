@@ -402,6 +402,17 @@ def print_perf_metrics(backend, median_time, std_time, tflops, tb_per_sec):
         f"[PERF] {backend.ljust(output_backend_width)}:: median time {median_time:.3f} ms; std {std_time:.3f} ms; achieved tflops {tflops:.3f} TFLOPs/sec; achieved tb_per_sec {tb_per_sec:.3f} TB/sec"
     )
 
+def warn_if_pdl_unsupported(args, routine_name):
+    """Emit a one-shot warning if --enable_pdl is set but the routine's API does
+    not accept enable_pdl. Call from the top of test functions whose underlying
+    flashinfer API takes no enable_pdl parameter, so users get clear feedback
+    that the flag is a no-op instead of silently being ignored.
+    """
+    if getattr(args, "enable_pdl", False):
+        print(
+            f"[WARNING] --enable_pdl provided but routine {routine_name} does not support PDL; flag is ignored."
+        )
+
 def get_device(args):
     # Synchronize to ensure that the device is ready after previous tests
     torch.npu.empty_cache()
